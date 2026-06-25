@@ -1,0 +1,968 @@
+// @version=5
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+
+
+indicator('Mc War V2 + V3 + Session', overlay = true
+  
+  , max_bars_back = 500)
+
+//-----------------------------------------------------------------------------{
+//-----------------------------------------------------------------------------{
+//-----------------------------------------------------------------------------{
+//Constants
+//-----------------------------------------------------------------------------{
+
+    
+color TRANSP_CSS = #f3f3f300
+
+
+
+
+//Cài đặt
+//-----------------------------------------------------------------------------{
+int length1 = 30
+// length1   = input.int(30, 'Swing', minval = 3 , group = '═══════════════ ORDER BLOCK V3 ═══════════════')
+showBear = input.int(3, 'Số OB trên', minval = 0, group = '═══════════════ ORDER BLOCK V3 ═══════════════')
+showBull = input.int(3, 'Số OB dưới', minval = 0, group = '═══════════════ ORDER BLOCK V3 ═══════════════')
+// useBody  = input(false, 'Thu gọn OB không nên dùng', group = 'OB V3')
+
+//Style
+bearCss      = input(color.new(#ff9800, 90), 'OB trên', group = '═══════════════ ORDER BLOCK V3 ═══════════════')
+bearBreakCss = (color.new(#ff1100, 100) )
+
+
+
+bullCss      = input(color.new(#ff9800, 90), 'OB dưới', group = '═══════════════ ORDER BLOCK V3 ═══════════════')
+bullBreakCss = (color.new(#ff1100, 100) )
+
+
+
+
+
+//-----------------------------------------------------------------------------}
+
+//-----------------------------------------------------------------------------{
+type ob1
+    float top1 = na
+    float btm1 = na
+    int   loc1 = bar_index
+    bool  breaker1 = false
+    int   break_loc1 = na
+    
+
+type swing
+    float y = na
+    int   x = na
+    bool  crossed = false
+
+var obv3Boxes = array.new_box()
+for bx in obv3Boxes
+    box.delete(bx)
+
+//-----------------------------------------------------------------------------}
+//Functions
+//-----------------------------------------------------------------------------{
+swings1(len)=>
+    var os = 0
+    var swing top1 = swing.new(na, na)
+    var swing btm1 = swing.new(na, na)
+    
+    upper = ta.highest(len)
+    lower = ta.lowest(len)
+
+    os := high[len] > upper ? 0 
+      : low[len] < lower ? 1 : os
+
+    if os == 0 and os[1] != 0
+        top1 := swing.new(high[length1], bar_index[length1])
+    
+    if os == 1 and os[1] != 1
+        btm1 := swing.new(low[length1], bar_index[length1])
+
+    [top1, btm1]
+
+method notransp(color css) => color.rgb(color.r(css), color.g(css), color.b(css))
+
+method display(ob1 id, css, break_css)=>
+    if id.breaker1
+        box bx = box.new(
+             id.loc1, id.top1,
+             id.break_loc1, id.btm1,
+             css.notransp(),
+             bgcolor = css,
+             xloc = xloc.bar_time)
+
+        array.push(obv3Boxes, bx)
+
+        bx := box.new(
+             id.break_loc1, id.top1,
+             time + 1, id.btm1,
+             na,
+             bgcolor = break_css,
+             extend = extend.right,
+             xloc = xloc.bar_time)
+
+        array.push(obv3Boxes, bx)
+
+    else
+        box bx = box.new(
+             id.loc1, id.top1,
+             time, id.btm1,
+             na,
+             bgcolor = css,
+             extend = extend.right,
+             xloc = xloc.bar_time)
+
+        array.push(obv3Boxes, bx)
+//-----------------------------------------------------------------------------}
+
+n1 = bar_index
+
+useBody = false
+
+[top1, btm1] = swings1(length1)
+max = useBody ? math.max(close, open) : high
+min = useBody ? math.min(close, open) : low
+
+//-----------------------------------------------------------------------------}
+// OB trên
+//-----------------------------------------------------------------------------{
+var bullish_ob = array.new<ob1>(0)
+bull_break_conf = 0
+
+if close > top1.y and not top1.crossed
+    top1.crossed := true
+
+    minima = max[1]
+    maxima = min[1]
+    loc = time[1]
+
+    for i = 1 to (n1 - top1.x)-1
+        minima := math.min(min[i], minima)
+        maxima := minima == min[i] ? max[i] : maxima
+        loc := minima == min[i] ? time[i] : loc
+
+    bullish_ob.unshift(ob1.new(maxima, minima, loc))
+
+if bullish_ob.size() > 0
+    for i = bullish_ob.size()-1 to 0
+        element = bullish_ob.get(i)
+    
+        if not element.breaker1 
+            if math.min(close, open) < element.btm1
+                element.breaker1 := true
+                element.break_loc1 := time
+        else
+            if close > element.top1
+                bullish_ob.remove(i)
+            else if i < showBull and top1.y < element.top1 and top1.y > element.btm1 
+                bull_break_conf := 1
+
+//-----------------------------------------------------------------------------}
+// OB dưới
+//-----------------------------------------------------------------------------{
+var bearish_ob = array.new<ob1>(0)
+bear_break_conf = 0
+
+if close < btm1.y and not btm1.crossed
+    btm1.crossed := true
+
+    minima = min[1]
+    maxima = max[1]
+    loc = time[1]
+
+    for i = 1 to (n1 - btm1.x)-1
+        maxima := math.max(max[i], maxima)
+        minima := maxima == max[i] ? min[i] : minima
+        loc := maxima == max[i] ? time[i] : loc
+
+    bearish_ob.unshift(ob1.new(maxima, minima, loc))
+
+if bearish_ob.size() > 0
+    for i = bearish_ob.size()-1 to 0
+        element = bearish_ob.get(i)
+
+        if not element.breaker1 
+            if math.max(close, open) > element.top1
+                element.breaker1 := true
+                element.break_loc1 := time
+        else
+            if close < element.btm1
+                bearish_ob.remove(i)
+            else if i < showBear and btm1.y > element.btm1 and btm1.y < element.top1 
+                bear_break_conf := 1
+
+
+//-----------------------------------------------------------------------------}
+// Order Blocks
+//-----------------------------------------------------------------------------{
+// for bx in box.all
+//     bx.delete()
+
+// for l in line.all
+//     l.delete()
+
+if barstate.islast
+    for bx in obv3Boxes
+        box.delete(bx)
+
+    array.clear(obv3Boxes)
+    //Bullish
+    if showBull > 0
+        for i = 0 to math.min(showBull-1, bullish_ob.size())
+            get_ob = bullish_ob.get(i)
+            get_ob.display(bullCss, bullBreakCss)
+
+    //Bearish
+    if showBear > 0
+
+        for i = 0 to math.min(showBear-1, bearish_ob.size())
+            get_ob = bearish_ob.get(i)
+            get_ob.display(bearCss, bearBreakCss)
+
+//-----------------------------------------------------------------------------}
+//-----------------------------------------------------------------------------}
+//-----------------------------------------------------------------------------}
+//-----------------------------------------------------------------------------}
+//-----------------------------------------------------------------------------}
+//-----------------------------------------------------------------------------}
+//-----------------------------------------------------------------------------}
+
+//-----------------------------------------------------------------------------{
+//General
+//----------------------------------------{
+
+
+
+
+//----------------------------------------}
+//Swing Structure
+//----------------------------------------{
+show_Structure = input(true, 'Hiện Swing Structure'
+  , group = 'Structure Thực'
+  )
+
+//Bull Structure
+show_bull = input.string('All', 'Bullish Structure'
+  , options = ['All', 'BOS', 'CHoCH']
+  , inline = 'bull'
+  , group = 'Structure Thực')
+bull_css = #089981
+bear_css = #f23645
+
+
+//Bear Structure
+show_bear = input.string('All', 'Bearish Structure'
+  , options = ['All', 'BOS', 'CHoCH']
+  , inline = 'bear'
+  , group = 'Structure Thực')
+
+
+swing_structure_size = input.string('Small', 'Swing Label Size'
+  , options = ['Tiny', 'Small', 'Normal']
+  , group = 'Structure Thực')
+
+//Swings
+show_swings = input(false, 'Hiện Swings Points'
+  , inline = 'swings'
+  , group = 'Structure Thực'
+  )
+
+length = input.int(50, ''
+  , minval = 10
+  , inline = 'swings'
+  , group = 'Structure Thực')
+
+show_hl_swings = input(true, 'Hiện Strong/Weak High/Low'
+  , group = 'Structure Thực'
+  )
+
+//----------------------------------------}
+//----------------------------------------}
+//----------------------------------------}
+//----------------------------------------}
+//----------------------------------------}
+//----------------------------------------}
+//----------------------------------------}
+//----------------------------------------}
+//----------------------------------------}
+//----------------------------------------}
+//----------------------------------------}
+//----------------------------------------}
+//Order Blocks  V2
+//----------------------------------------{
+
+
+
+
+show_ob = input(true, 'Swing Order Blocks'
+  , inline = 'ob'
+  , group = '═══════════════ ORDER BLOCK V2 ═══════════════'
+ )
+
+ob_showlast = input.int(3, ''
+  , minval = 1
+  , inline = 'ob',
+   group = '═══════════════ ORDER BLOCK V2 ═══════════════'
+ )
+
+
+bull_ob_css = color.new(#787b86, 80)
+bear_ob_css = color.new(#787b86, 80)
+//----------------------------------------}
+
+
+//Functions
+//-----------------------------------------------------------------------------{
+int n = bar_index
+bool ob_filter = true
+
+atr = ta.atr(200)
+cmean_range = ta.cum(high - low) / n
+
+//HL Output function
+
+//Get ohlc values function
+
+//Display Structure function
+display_Structure(x, y, txt, css, dashed, down, lbl_size)=>
+    structure_line = line.new(x, y, n, y
+      , color = css
+      , style = dashed ? line.style_dashed : line.style_solid)
+
+    structure_lbl = label.new(int(math.avg(x, n)), y, txt
+      , color = TRANSP_CSS
+      , textcolor = css
+      , style = down ? label.style_label_down : label.style_label_up
+      , size = lbl_size)
+
+  
+//Swings detection/measurements
+swings(len)=>
+    var os = 0
+    
+    upper = ta.highest(len)
+    lower = ta.lowest(len)
+
+    os := high[len] > upper ? 0 : low[len] < lower ? 1 : os[1]
+
+    top = os == 0 and os[1] != 0 ? high[len] : 0
+    btm = os == 1 and os[1] != 1 ? low[len] : 0
+
+    [top, btm]
+
+//Order block coordinates function
+ob_coords(use_max, loc, target_top, target_btm, target_left, target_type)=>
+    min = 99999999.
+    max = 0.
+    idx = 1
+
+    ob_threshold = ob_filter == true? atr : cmean_range 
+
+    //Search for highest/lowest high within the structure interval and get range
+    if use_max
+        for i = 1 to (n - loc)-1
+            if (high[i] - low[i]) < ob_threshold[i] * 2
+                max := math.max(high[i], max)
+                min := max == high[i] ? low[i] : min
+                idx := max == high[i] ? i : idx
+    else
+        for i = 1 to (n - loc)-1
+            if (high[i] - low[i]) < ob_threshold[i] * 2
+                min := math.min(low[i], min)
+                max := min == low[i] ? high[i] : max
+                idx := min == low[i] ? i : idx
+
+    array.unshift(target_top, max)
+    array.unshift(target_btm, min)
+    array.unshift(target_left, time[idx])
+    array.unshift(target_type, use_max ? -1 : 1)
+
+//Set order blocks
+display_ob(boxes, target_top, target_btm, target_left, target_type, show_last, swing, size)=>
+    for i = 0 to math.min(show_last-1, size-1)
+        get_box = array.get(boxes, i)
+
+        box.set_lefttop(get_box, array.get(target_left, i), array.get(target_top, i))
+        box.set_rightbottom(get_box, array.get(target_left, i), array.get(target_btm, i))
+        box.set_extend(get_box, extend.right)
+
+        color css = array.get(target_type, i) == 1 ? bull_ob_css : bear_ob_css
+
+        box.set_border_color(get_box, css)
+        box.set_bgcolor(get_box, css)
+
+//Global variables
+//-----------------------------------------------------------------------------{
+var trend = 0, var itrend = 0
+
+var top_y = 0., var top_x = 0
+var btm_y = 0., var btm_x = 0
+
+var itop_y = 0., var itop_x = 0
+var ibtm_y = 0., var ibtm_x = 0
+
+var trail_up = high, var trail_dn = low
+var trail_up_x = 0,  var trail_dn_x = 0
+
+var top_cross = true,  var btm_cross = true
+var itop_cross = true, var ibtm_cross = true
+
+var txt_top = '',  var txt_btm = ''
+
+
+//Labels size
+
+var swing_structure_lbl_size = swing_structure_size == 'normal' 
+  ? size.tiny 
+  : swing_structure_size == 'Small' 
+  ? size.small 
+  : size.normal 
+
+
+//Swings
+[top, btm] = swings(length)
+
+[itop, ibtm] = swings(5)
+
+//-----------------------------------------------------------------------------}
+//Pivot High
+//-----------------------------------------------------------------------------{
+var line extend_top = na
+
+var label extend_top_lbl = label.new(na, na
+  , color = TRANSP_CSS
+  , textcolor = bear_css
+  , style = label.style_label_down
+  , size = size.tiny)
+
+if top
+    top_cross := true
+    txt_top := top > top_y ? 'HH' : 'LH'
+
+    if show_swings
+        top_lbl = label.new(n-length, top, txt_top
+          , color = TRANSP_CSS
+          , textcolor = bear_css
+          , style = label.style_label_down
+          , size = swing_structure_lbl_size)
+
+      
+    //Extend recent top to last bar
+    line.delete(extend_top[1])
+    extend_top := line.new(n-length, top, n, top
+      , color = bear_css)
+
+    top_y := top
+    top_x := n - length
+
+    trail_up := top
+    trail_up_x := n - length
+
+if itop
+    itop_cross := true
+
+    itop_y := itop
+    itop_x := n - 5
+
+trail_up := math.max(high, trail_up)
+trail_up_x := trail_up == high ? n : trail_up_x
+
+if barstate.islast and show_hl_swings
+    line.set_xy1(extend_top, trail_up_x, trail_up)
+    line.set_xy2(extend_top, n + 20, trail_up)
+
+    label.set_x(extend_top_lbl, n + 20)
+    label.set_y(extend_top_lbl, trail_up)
+    label.set_text(extend_top_lbl, trend < 0 ? 'Strong High' : 'Weak High')
+
+//-----------------------------------------------------------------------------}
+
+//-----------------------------------------------------------------------------{
+var line extend_btm = na 
+
+var label extend_btm_lbl = label.new(na, na
+  , color = TRANSP_CSS
+  , textcolor = bull_css
+  , style = label.style_label_up
+  , size = size.tiny)
+
+if btm
+    btm_cross := true
+    txt_btm := btm < btm_y ? 'LL' : 'HL'
+    
+    if show_swings
+        btm_lbl = label.new(n - length, btm, txt_btm
+          , color = TRANSP_CSS
+          , textcolor = bull_css
+          , style = label.style_label_up
+          , size = swing_structure_lbl_size)
+
+      
+
+    line.delete(extend_btm[1])
+    extend_btm := line.new(n - length, btm, n, btm
+      , color = bull_css)
+
+    btm_y := btm
+    btm_x := n-length
+
+    trail_dn := btm
+    trail_dn_x := n-length
+
+if ibtm
+    ibtm_cross := true
+
+    ibtm_y := ibtm
+    ibtm_x := n - 5
+
+
+trail_dn := math.min(low, trail_dn)
+trail_dn_x := trail_dn == low ? n : trail_dn_x
+
+
+if barstate.islast and show_hl_swings
+    line.set_xy1(extend_btm, trail_dn_x, trail_dn)
+    line.set_xy2(extend_btm, n + 20, trail_dn)
+
+    label.set_x(extend_btm_lbl, n + 20)
+    label.set_y(extend_btm_lbl, trail_dn)
+    label.set_text(extend_btm_lbl, trend > 0 ? 'Strong Low' : 'Weak Low')
+
+//-----------------------------------------------------------------------------}
+
+//-----------------------------------------------------------------------------{
+
+
+var ob_top = array.new_float(0)
+var ob_btm = array.new_float(0)
+var ob_left = array.new_int(0)
+var ob_type = array.new_int(0)
+
+//-----------------------------------------------------------------------------}
+
+//-----------------------------------------------------------------------------{
+
+var bull_concordant = true
+
+if ta.crossover(close, itop_y) and itop_cross and top_y != itop_y and bull_concordant
+    bool chochh = na
+    
+    if itrend < 0
+        chochh := true
+ 
+    txt = chochh ? 'CHoCH' : 'BOS'
+
+ 
+    itop_cross := false
+    itrend := 1
+    
+
+if ta.crossover(close, top_y) and top_cross
+    bool chochh = na
+    
+    if trend < 0
+        chochh := true
+
+    txt = chochh ? 'CHoCH' : 'BOS'
+    
+    if show_Structure
+        if show_bull == 'All' or (show_bull == 'BOS' and not chochh) or (show_bull == 'CHoCH' and chochh)
+            display_Structure(top_x, top_y, txt, bull_css, false, true, swing_structure_lbl_size)
+    
+    
+    if show_ob
+        ob_coords(false, top_x, ob_top, ob_btm, ob_left, ob_type)
+
+    top_cross := false
+    trend := 1
+
+//-----------------------------------------------------------------------------}
+
+//-----------------------------------------------------------------------------{
+var bear_concordant = true
+
+
+
+if ta.crossunder(close, ibtm_y) and ibtm_cross and btm_y != ibtm_y and bear_concordant
+    bool chochh = false
+    
+    if itrend > 0
+        chochh := true
+    
+    
+    txt = chochh ? 'CHoCH' : 'BOS'
+
+ 
+    ibtm_cross := false
+    itrend := -1
+    
+
+if ta.crossunder(close, btm_y) and btm_cross
+    bool chochh = na
+    
+    if trend > 0
+        chochh := true
+
+    txt = chochh ? 'CHoCH' : 'BOS'
+    
+    if show_Structure
+        if show_bear == 'All' or (show_bear == 'BOS' and not chochh) or (show_bear == 'CHoCH' and chochh)
+            display_Structure(btm_x, btm_y, txt, bear_css, false, false, swing_structure_lbl_size)
+    
+
+    if show_ob
+        ob_coords(true, btm_x, ob_top, ob_btm, ob_left, ob_type)
+
+    btm_cross := false
+    trend := -1
+
+//-----------------------------------------------------------------------------}
+//-----------------------------------------------------------------------------{
+
+var ob_boxes = array.new_box(0)
+
+
+
+for element in ob_type
+    index = array.indexof(ob_type, element)
+
+    if close < array.get(ob_btm, index) and element == 1
+        array.remove(ob_top, index) 
+        array.remove(ob_btm, index) 
+        array.remove(ob_left, index) 
+        array.remove(ob_type, index)
+
+    else if close > array.get(ob_top, index) and element == -1
+        array.remove(ob_top, index) 
+        array.remove(ob_btm, index)
+        array.remove(ob_left, index) 
+        array.remove(ob_type, index)
+
+ob_size = array.size(ob_type)
+
+if barstate.isfirst
+    
+    if show_ob
+        for i = 0 to ob_showlast-1
+            array.push(ob_boxes, box.new(na,na,na,na, xloc = xloc.bar_time))
+
+
+    
+
+if ob_size > 0
+    if barstate.islast
+        display_ob(ob_boxes, ob_top, ob_btm, ob_left, ob_type, ob_showlast, true, ob_size)
+
+//-----------------------------------------------------------------------------}
+//-----------------------------------------------------------------------------}
+//-----------------------------------------------------------------------------}
+//-----------------------------------------------------------------------------}
+//-----------------------------------------------------------------------------}
+//-----------------------------------------------------------------------------}
+//-----------------------------------------------------------------------------}
+//-----------------------------------------------------------------------------}
+//-----------------------------------------------------------------------------}
+//-----------------------------------------------------------------------------}
+//-----------------------------------------------------------------------------}
+
+
+
+// len1 = input(34, title='EMA 34',group='EMA')
+// len2 = input(89, title='EMA 89',group='EMA')
+// len3 = input(200, title='EMA 200',group='EMA')
+
+
+// M1 = ta.ema(close, len1)
+// M2 = ta.ema(close, len2)
+// M3 = ta.ema(close, len3)
+
+// plot(M1, color=color.new(#eeff00, 11), linewidth=1)
+// plot(M2, color=color.new(#2729b0, 0), linewidth=1)
+// plot(M3, color=color.new(#f32121, 0), linewidth=2)
+//text inputs
+//title settings
+title = input.string('MC War', 'Tittle', group='═══════════════ NICKNAME ═══════════════')
+c_title = input.color(color.new(color.silver, 20), 'Title Color', group='═══════════════ NICKNAME ═══════════════')
+s_title = input.string('large', 'Title Size', options=['tiny', 'small', 'normal', 'large', 'huge', 'auto'], group='═══════════════ NICKNAME ═══════════════')
+a_title = input.string('center', 'Title Alignment', options=['center', 'left', 'right'], group='═══════════════ NICKNAME ═══════════════')
+
+
+//subtitle settings
+
+subtitle = input.string('Nguyễn Thanh Tuấn', group='Tên')
+c_subtitle = input.color(color.new(color.silver, 40), 'Subitle Color', group='Tên')
+s_subtitle = input.string('normal', 'Subtitle Size', options=['tiny', 'small', 'normal', 'large', 'huge', 'auto'], group='Tên')
+a_subtitle = input.string('center', 'Subtitle Alignment', options=['center', 'left', 'right'], group='Tên')
+
+//Ngày giờ
+symInfoCheck = input.bool(title='Ngày - Mả - TF', defval=true,group='Ngày giờ')
+c_symInfo = input.color(color.new(color.silver, 40), 'Subitle Color', group='Ngày giờ')
+s_symInfo = input.string('normal', 'Subtitle Size', options=['tiny', 'small', 'normal', 'large', 'huge', 'auto'], group='Ngày giờ')
+a_symInfo = input.string('left', 'Subtitle Alignment', options=['center', 'left', 'right'], group='Ngày giờ')
+
+
+//symbol info
+symInfo = syminfo.ticker + ' | ' + timeframe.period + (timeframe.isminutes ? 'M' : na)
+date = str.format(
+     "{0}/{1}/{2}",
+     dayofmonth(time_close),
+     month(time_close),
+     year(time_close))//text positioning
+textVPosition = input.string('top', 'Trục X', options=['top', 'middle', 'bottom'], group='Vị trí tên')
+textHPosition = input.string('right', 'Trục Y', options=['left', 'center', 'right'], group='Vị trí tên')
+//symbol info positioning
+symVPosition = input.string('bottom', 'Trục X', options=['top', 'middle', 'bottom'], group='Vị trí ngày')
+symHPosition = input.string('right', 'Trục Y', options=['left', 'center', 'right'], group='Vị trí ngày')
+//cell size
+width = 0
+height = 0
+
+c_bg = input.color(color.new(color.blue, 100), 'Background', group='background')
+
+
+//text watermark creation
+var table textWatermark = table.new(textVPosition + '_' + textHPosition, 1, 3)
+table.cell(textWatermark, 0, 0, title, width, height, c_title, a_title, text_size=s_title, bgcolor=c_bg)
+table.cell(textWatermark, 0, 1, subtitle, width, height, c_subtitle, a_subtitle, text_size=s_subtitle, bgcolor=c_bg)
+
+
+//symbol info watermark creation
+var table symWatermark  = table.new(symVPosition + '_' + symHPosition, 5, 5)
+if symInfoCheck == true
+    table.cell(symWatermark, 0, 1, symInfo, width, height, c_symInfo, a_symInfo, text_size=s_symInfo, bgcolor=c_bg)
+    table.cell(symWatermark, 0, 0, date, width, height, c_symInfo, a_symInfo, text_size=s_symInfo, bgcolor=c_bg)
+
+
+
+  
+
+
+//-----------------------------------------------------------------------------{
+//-----------------------------------------------------------------------------{
+//-----------------------------------------------------------------------------{
+//-----------------------------------------------------------------------------{
+//-----------------------------------------------------------------------------{
+//-----------------------------------------------------------------------------{
+//-----------------------------------------------------------------------------{
+
+
+
+
+
+//Settings
+//-----------------------------------------------------------------------------{
+//Session A
+show_sesa = input(true, '', inline = 'sesa', group = '═══════════════ SESSIONS ═══════════════')
+sesa_txt = input('New York', '', inline = 'sesa', group = '═══════════════ SESSIONS ═══════════════')
+sesa_ses = input.session('1300-2200', '', inline = 'sesa', group = '═══════════════ SESSIONS ═══════════════')
+sesa_css = input.color(color.rgb(235, 110, 110), '', inline = 'sesa', group = '═══════════════ SESSIONS ═══════════════')
+
+
+//Session B
+show_sesb = input(true, '', inline = 'sesb', group = '═══════════════ SESSIONS ═══════════════')
+sesb_txt = input('London', '', inline = 'sesb', group = '═══════════════ SESSIONS ═══════════════')
+sesb_ses = input.session('0700-1600', '', inline = 'sesb', group = '═══════════════ SESSIONS ═══════════════')
+sesb_css = input.color(#92abf6, '', inline = 'sesb', group = '═══════════════ SESSIONS ═══════════════')
+
+
+//Session C
+show_sesc = input(false, '', inline = 'sesc', group = '═══════════════ SESSIONS ═══════════════')
+sesc_txt = input('Tokyo', '', inline = 'sesc', group = '═══════════════ SESSIONS ═══════════════')
+sesc_ses = input.session('0000-0900', '', inline = 'sesc', group = '═══════════════ SESSIONS ═══════════════')
+sesc_css = input.color(#e91e63, '', inline = 'sesc', group = '═══════════════ SESSIONS ═══════════════')
+
+
+//Session D
+show_sesd = input(false, '', inline = 'sesd', group = '═══════════════ SESSIONS ═══════════════')
+sesd_txt = input('Sydney', '', inline = 'sesd', group = '═══════════════ SESSIONS ═══════════════')
+sesd_ses = input.session('2100-0600', '', inline = 'sesd', group = '═══════════════ SESSIONS ═══════════════')
+sesd_css = input.color(#ffeb3b, '', inline = 'sesd', group = '═══════════════ SESSIONS ═══════════════')
+
+
+//Timezones
+
+//Ranges Options
+bg_transp = input.float(90, 'Range Area Transparency', group = 'Ranges Settings')
+show_outline = input(false, 'Range Outline', group = 'Ranges Settings')
+show_txt = input(false, 'Range Label', group = 'Ranges Settings')
+
+
+//Divider
+show_day_div = input(true, 'Show Daily Divider', group = 'Dividers')
+
+//-----------------------------------------------------------------------------}
+//Functions
+//-----------------------------------------------------------------------------{
+// n = bar_index
+
+//Set session range
+get_range(session, session_name, session_css)=>
+    var t = 0 
+    var max = high
+    var min = low
+    var box bx = na
+    var label lbl = na 
+    
+    if session > session[1]
+        t := time
+        max := high
+        min := low
+
+        bx := box.new(n, max, n, min
+          , bgcolor = color.new(session_css, bg_transp)
+          , border_color = show_outline ? session_css : na
+          , border_style = line.style_dotted)
+
+        if show_txt
+            lbl := label.new(t, max, session_name
+              , xloc = xloc.bar_time
+              , textcolor = session_css
+              , style = label.style_label_down
+              , color = color.new(color.white, 100)
+              , size = size.tiny)
+
+    if session and session == session[1]
+        max := math.max(high, max)
+        min := math.min(low, min)
+
+        box.set_top(bx, max)
+        box.set_rightbottom(bx, n, min)
+
+        if show_txt
+            label.set_xy(lbl, int(math.avg(t, time)), max)
+    
+    [session ? na : max, session ? na : min]
+
+//-----------------------------------------------------------------------------}
+//Sessions
+//-----------------------------------------------------------------------------{
+tf = timeframe.period
+
+var tz = 'UTC+0'
+
+is_sesa = math.sign(nz(time(tf, sesa_ses, tz)))
+is_sesb = math.sign(nz(time(tf, sesb_ses, tz)))
+is_sesc = math.sign(nz(time(tf, sesc_ses, tz)))
+is_sesd = math.sign(nz(time(tf, sesd_ses, tz)))
+
+
+//-----------------------------------------------------------------------------}
+//Overlays
+//-----------------------------------------------------------------------------{
+var float max_sesa = na
+var float min_sesa = na
+var float max_sesb = na
+var float min_sesb = na
+var float max_sesc = na
+var float min_sesc = na
+var float max_sesd = na
+var float min_sesd = na
+
+//Ranges
+if show_sesa
+    [max, min] = get_range(is_sesa, sesa_txt, sesa_css)
+    max_sesa := max
+    min_sesa := min
+
+if show_sesb
+    [max, min] = get_range(is_sesb, sesb_txt, sesb_css)
+    max_sesb := max
+    min_sesb := min
+
+if show_sesc
+    [max, min] = get_range(is_sesc, sesc_txt, sesc_css)
+    max_sesc := max
+    min_sesc := min
+
+if show_sesd
+    [max, min] = get_range(is_sesd, sesd_txt, sesd_css)
+    max_sesd := max
+    min_sesd := min
+//-----------------------------------------------------------------------------}
+//Plots
+//-----------------------------------------------------------------------------{
+//Plot Divider A
+
+//-----------------------------------------------------------------------------}
+//Plots daily dividers
+//-----------------------------------------------------------------------------{
+day = dayofweek
+
+if day != day[1] and show_day_div
+    line.new(n, close + syminfo.mintick, n, close - syminfo.mintick
+      , color  = color.gray
+      , extend = extend.both
+      , style  = line.style_dashed)
+
+plotshape(day != day[1] and day == 1 and show_day_div, "Sunday"
+  , shape.labeldown
+  , location.top
+  , na
+  , text = "Sunday"
+  , textcolor = color.gray
+  , size = size.tiny
+  , display = display.all - display.status_line
+  , editable = false)
+
+plotshape(day != day[1] and day == 2 and show_day_div, "Monday"
+  , shape.labeldown
+  , location.top
+  , na
+  , text = "Monday"
+  , textcolor = color.gray
+  , size = size.tiny
+  , display = display.all - display.status_line
+  , editable = false)
+
+plotshape(day != day[1] and day == 3 and show_day_div, "Tuesday"
+  , shape.labeldown
+  , location.top
+  , na
+  , text = "Tuesday"
+  , textcolor = color.gray
+  , size = size.tiny
+  , display = display.all - display.status_line
+  , editable = false)
+
+plotshape(day != day[1] and day == 4 and show_day_div, "Wednesay"
+  , shape.labeldown
+  , location.top
+  , na
+  , text = "Wednesday"
+  , textcolor = color.gray
+  , size = size.tiny
+  , display = display.all - display.status_line
+  , editable = false)
+
+plotshape(day != day[1] and day == 5 and show_day_div, "Thursday"
+  , shape.labeldown
+  , location.top
+  , na
+  , text = "Thursday"
+  , textcolor = color.gray
+  , size = size.tiny
+  , display = display.all - display.status_line
+  , editable = false)
+
+plotshape(day != day[1] and day == 6 and show_day_div, "Friday"
+  , shape.labeldown
+  , location.top
+  , na
+  , text = "Friday"
+  , textcolor = color.gray
+  , size = size.tiny
+  , display = display.all - display.status_line
+  , editable = false)
+
+plotshape(day != day[1] and day == 7 and show_day_div, "Saturday"
+  , shape.labeldown
+  , location.top
+  , na
+  , text = "Saturday"
+  , textcolor = color.gray
+  , size = size.tiny
+  , display = display.all - display.status_line
+  , editable = false)
+
+//-----------------------------------------------------------------------------}
