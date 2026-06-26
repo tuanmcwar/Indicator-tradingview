@@ -1,10 +1,8 @@
 // @version=5
 // This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
 
-
-indicator('Mc War V2 + V3 + Session', overlay = true
-  
-  , max_bars_back = 500)
+//@version=5
+indicator("Mc War V2 + V3 + Session", overlay=true, max_bars_back=500, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
 
 //-----------------------------------------------------------------------------{
 //-----------------------------------------------------------------------------{
